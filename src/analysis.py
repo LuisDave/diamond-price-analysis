@@ -12,6 +12,7 @@ import itertools
 import json
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,6 +28,7 @@ FIGURES_DIR = ROOT / "outputs" / "figures"
 TARGET = "price"
 NUMERIC_PREDICTORS = ["carat", "depth", "table", "x", "y", "z"]
 CATEGORICAL_PREDICTORS = ["cut", "color", "clarity"]
+ALL_PREDICTORS = [*NUMERIC_PREDICTORS, *CATEGORICAL_PREDICTORS]
 REQUIRED_COLUMNS = [TARGET, *NUMERIC_PREDICTORS, *CATEGORICAL_PREDICTORS]
 
 # Los órdenes fijan niveles de referencia interpretable en el modelo OLS.
@@ -221,7 +223,7 @@ def fit_ols(data: pd.DataFrame, predictors: list[str]) -> OLSResult:
 
 def fit_full_model(data: pd.DataFrame) -> OLSResult:
     """Ajusta el modelo OLS con seis predictores numéricos y tres categóricos."""
-    return fit_ols(data, [*NUMERIC_PREDICTORS, *CATEGORICAL_PREDICTORS])
+    return fit_ols(data, ALL_PREDICTORS)
 
 
 def model_metrics(model: OLSResult) -> pd.DataFrame:
@@ -272,21 +274,28 @@ def coefficient_table(model: OLSResult) -> pd.DataFrame:
     return table
 
 
-def select_two_numeric_predictor_models(data: pd.DataFrame) -> pd.DataFrame:
-    """Compara los 15 pares de predictores numéricos por AIC y R².
+def predictor_expression(predictor: str) -> str:
+    """Devuelve la expresión legible de un predictor dentro de una fórmula."""
+    return f"C({predictor})" if predictor in CATEGORICAL_PREDICTORS else predictor
 
-    Se comparan variables numéricas originales para que todos los modelos tengan
-    exactamente dos predictores. Las variables categóricas se dejan en el modelo
-    completo; cada una genera varios indicadores y no es directamente comparable
-    con un único predictor numérico en esta comparación.
+
+def select_two_predictor_models(data: pd.DataFrame) -> pd.DataFrame:
+    """Compara los 36 pares de las nueve variables predictoras originales.
+
+    Un predictor categórico se incorpora mediante indicadores con la primera
+    categoría como referencia. Por ello, dos variables fuente no necesariamente
+    producen el mismo número de parámetros; la tabla expone ese número para que
+    las comparaciones por AIC, R² y R² ajustada sean transparentes.
     """
     records: list[dict[str, Any]] = []
-    for first, second in itertools.combinations(NUMERIC_PREDICTORS, 2):
+    for first, second in itertools.combinations(ALL_PREDICTORS, 2):
         model = fit_ols(data, [first, second])
         records.append(
             {
                 "predictor_1": first,
                 "predictor_2": second,
+                "formula": f"{TARGET} ~ {predictor_expression(first)} + {predictor_expression(second)}",
+                "n_parameters": len(model.term_names),
                 "aic": model.aic,
                 "bic": model.bic,
                 "r_squared": model.rsquared,
@@ -296,6 +305,46 @@ def select_two_numeric_predictor_models(data: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(records).sort_values("aic", kind="stable").reset_index(drop=True)
+
+
+def significant_terms(coefficients: pd.DataFrame) -> pd.DataFrame:
+    """Separa términos individuales significativos de los grupos categóricos."""
+    table = coefficients.loc[coefficients["termino"] != "Intercept"].copy()
+    table["tipo_termino"] = np.where(
+        table["termino"].isin(NUMERIC_PREDICTORS),
+        "Variable numérica",
+        "Coeficiente de categoría",
+    )
+    table["variable_origen"] = table["termino"].str.extract(r"C\(([^)]+)\)", expand=False)
+    table["variable_origen"] = table["variable_origen"].fillna(table["termino"])
+    return table.loc[table["significativo_5pct"]].sort_values("p_value").reset_index(drop=True)
+
+
+def categorical_joint_significance(data: pd.DataFrame, full_model: OLSResult) -> pd.DataFrame:
+    """Prueba cada variable categórica completa con un F parcial.
+
+    H0 establece que todos los indicadores de esa variable categórica son cero,
+    condicionado a los demás predictores del modelo completo.
+    """
+    full_sse = full_model.mse_resid * full_model.df_resid
+    records: list[dict[str, Any]] = []
+    for categorical in CATEGORICAL_PREDICTORS:
+        reduced_predictors = [predictor for predictor in ALL_PREDICTORS if predictor != categorical]
+        reduced_model = fit_ols(data, reduced_predictors)
+        reduced_sse = reduced_model.mse_resid * reduced_model.df_resid
+        numerator_df = len(full_model.term_names) - len(reduced_model.term_names)
+        f_statistic = max((reduced_sse - full_sse) / numerator_df, 0.0) / full_model.mse_resid
+        p_value = stats.f.sf(f_statistic, numerator_df, full_model.df_resid)
+        records.append(
+            {
+                "variable_categorica": categorical,
+                "n_coeficientes_categoria": numerator_df,
+                "f_parcial": f_statistic,
+                "p_value": p_value,
+                "significativa_5pct": p_value < 0.05,
+            }
+        )
+    return pd.DataFrame(records)
 
 
 def breusch_pagan_test(model: OLSResult) -> pd.DataFrame:
@@ -360,15 +409,19 @@ def run_pipeline() -> dict[str, Any]:
     model = fit_full_model(data)
     coefficients = coefficient_table(model)
     metrics = model_metrics(model)
-    candidate_models = select_two_numeric_predictor_models(data)
+    candidate_models = select_two_predictor_models(data)
     bp_results = breusch_pagan_test(model)
+    significant = significant_terms(coefficients)
+    categorical_significance = categorical_joint_significance(data, model)
 
     dictionary.to_csv(TABLES_DIR / "data_dictionary.csv", index=False)
     pd.DataFrame([audit]).to_csv(TABLES_DIR / "data_cleaning_audit.csv", index=False)
     coefficients.to_csv(TABLES_DIR / "full_model_coefficients.csv", index=False)
     metrics.to_csv(TABLES_DIR / "full_model_metrics.csv", index=False)
-    candidate_models.to_csv(TABLES_DIR / "two_numeric_predictor_models.csv", index=False)
+    candidate_models.to_csv(TABLES_DIR / "two_predictor_models.csv", index=False)
     bp_results.to_csv(TABLES_DIR / "breusch_pagan.csv", index=False)
+    significant.to_csv(TABLES_DIR / "significant_terms_5pct.csv", index=False)
+    categorical_significance.to_csv(TABLES_DIR / "categorical_variables_joint_significance.csv", index=False)
     summary_lines = [
         "Regresión lineal múltiple OLS",
         f"Fórmula: {FULL_FORMULA}",
@@ -388,6 +441,11 @@ def run_pipeline() -> dict[str, Any]:
         .sort_values("abs_t", ascending=False)
     )
     significant_numeric.to_csv(TABLES_DIR / "numeric_predictors_by_abs_t.csv", index=False)
+    top_two_numeric = significant_numeric.head(2).copy()
+    top_two_numeric.to_csv(TABLES_DIR / "top_two_numeric_predictors_by_abs_t.csv", index=False)
+    top_two_numeric.head(1).assign(variable_seleccionada=lambda frame: frame["termino"]).to_csv(
+        TABLES_DIR / "selected_predictor_ci_95.csv", index=False
+    )
     create_figures(data, model)
 
     result = {

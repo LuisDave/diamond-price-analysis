@@ -9,7 +9,7 @@ Construir una referencia compacta de análisis de regresión aplicada: partir de
 El análisis responde tres preguntas:
 
 - ¿Qué características del diamante muestran mayor asociación con el precio?
-- ¿Qué par de predictores numéricos ofrece el mejor ajuste según AIC y R²?
+- ¿Qué par de variables predictoras ofrece el mejor ajuste según AIC y R²?
 - ¿Qué revelan los residuos sobre los supuestos del modelo lineal?
 
 ## Datos y enfoque
@@ -32,6 +32,8 @@ Antes del ajuste se excluyen únicamente registros con alguna dimensión `x`, `y
 data/raw/diamonds.csv              # dataset extraído del ZIP proporcionado
 notebooks/01_regresion_diamantes.ipynb
 src/analysis.py                    # canalización reproducible
+src/validate_statsmodels.py        # validación independiente del ajuste OLS
+tests/test_pipeline.py              # prueba de integración del proyecto
 outputs/tables/                    # resultados CSV, resumen OLS y prueba BP
 outputs/figures/                   # figuras de exploración y diagnóstico
 requirements.txt
@@ -47,6 +49,8 @@ py -3.11 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m src.analysis
+python -m unittest tests.test_pipeline
+python -m src.validate_statsmodels
 jupyter lab
 ```
 
@@ -58,12 +62,14 @@ Abra después `notebooks/01_regresion_diamantes.ipynb` desde la raíz del proyec
 | --- | --- |
 | Exploración de datos | `data_dictionary.csv`, auditoría de limpieza y gráfica de precio frente a quilates. |
 | Modelo completo | `full_model_summary.txt`, `full_model_coefficients.csv` y `full_model_metrics.csv`. |
-| Incertidumbre de coeficientes | Errores estándar, estadísticos t, valores p e intervalos al 95 % en `full_model_coefficients.csv`. |
+| Significancia e incertidumbre | `significant_terms_5pct.csv` separa términos significativos al 5 %; `categorical_variables_joint_significance.csv` evalúa cada variable categórica como grupo; los IC están en `full_model_coefficients.csv`. |
 | Diagnóstico | Métricas de normalidad, Durbin-Watson, número de condición, gráfica de residuos y gráfica Q-Q. |
-| Comparación de modelos simples | `two_numeric_predictor_models.csv` ordena los 15 pares numéricos por AIC e incluye R². |
+| Comparación de modelos | `two_predictor_models.csv` compara los 36 pares posibles de las nueve variables predictoras por AIC, R² y R² ajustada. |
+| Predictores principales | `top_two_numeric_predictors_by_abs_t.csv` identifica los dos predictores numéricos con mayor `|t|`; `selected_predictor_ci_95.csv` muestra el IC 95 % del primero. |
 | Varianza de residuos | `breusch_pagan.csv` contiene la prueba de Breusch-Pagan. |
+| Validación externa | `statsmodels_validation.csv`, generado por `python -m src.validate_statsmodels`, contrasta el ajuste contra `statsmodels`. |
 
-La comparación de pares usa las seis variables numéricas originales. Una variable categórica se transforma en varios indicadores, por lo que no es equivalente a un solo predictor en esta comparación.
+La comparación de pares usa las nueve variables predictoras originales. Cada variable categórica se codifica mediante indicadores con una categoría de referencia; por ello, la tabla incluye `n_parameters` para mostrar cuántos parámetros estima cada modelo.
 
 ## Reproducibilidad
 
