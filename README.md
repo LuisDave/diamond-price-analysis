@@ -65,7 +65,7 @@ Abra después `notebooks/01_regresion_diamantes.ipynb` desde la raíz del proyec
 | Significancia e incertidumbre | `significant_terms_5pct.csv` separa términos significativos al 5 %; `categorical_variables_joint_significance.csv` evalúa cada variable categórica como grupo; los IC están en `full_model_coefficients.csv`. |
 | Diagnóstico | Métricas de normalidad, Durbin-Watson, número de condición, gráfica de residuos y gráfica Q-Q. |
 | Comparación de modelos | `two_predictor_models.csv` compara los 36 pares posibles de las nueve variables predictoras por AIC, R² y R² ajustada. |
-| Predictores principales | `top_two_numeric_predictors_by_abs_t.csv` identifica los dos predictores numéricos con mayor `|t|`; `selected_predictor_ci_95.csv` muestra el IC 95 % del primero. |
+| Predictores principales | `top_two_numeric_predictors_by_abs_t.csv` identifica los dos predictores numéricos con mayor `|t|`; `top_two_coefficients_by_abs_t.csv` añade el ranking global, incluidos indicadores categóricos y su referencia; `selected_predictor_ci_95.csv` muestra el IC 95 % del primer predictor numérico. |
 | Varianza de residuos | `breusch_pagan.csv` contiene la prueba de Breusch-Pagan. |
 | Validación externa | `statsmodels_validation.csv`, generado por `python -m src.validate_statsmodels`, contrasta el ajuste contra `statsmodels`. |
 

@@ -25,6 +25,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             "significant_terms_5pct.csv",
             "categorical_variables_joint_significance.csv",
             "top_two_numeric_predictors_by_abs_t.csv",
+            "all_coefficients_by_abs_t.csv",
+            "top_two_coefficients_by_abs_t.csv",
             "selected_predictor_ci_95.csv",
             "breusch_pagan.csv",
             "full_model_summary.txt",
@@ -52,6 +54,12 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertEqual(selected.loc[0, "termino"], top_two.loc[0, "termino"])
         self.assertAlmostEqual(selected.loc[0, "ci_95_inf"], top_two.loc[0, "ci_95_inf"])
         self.assertAlmostEqual(selected.loc[0, "ci_95_sup"], top_two.loc[0, "ci_95_sup"])
+
+    def test_global_coefficient_ranking_includes_categorical_indicators(self) -> None:
+        top_two = pd.read_csv(analysis.TABLES_DIR / "top_two_coefficients_by_abs_t.csv")
+        self.assertEqual(top_two.loc[0, "termino"], "carat")
+        self.assertEqual(top_two.loc[1, "termino"], "C(clarity)[T.VVS2]")
+        self.assertEqual(top_two.loc[1, "referencia"], "I1")
 
     def test_summary_identifies_best_pairs_from_generated_table(self) -> None:
         pairs = pd.read_csv(analysis.TABLES_DIR / "two_predictor_models.csv")

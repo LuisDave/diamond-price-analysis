@@ -446,6 +446,20 @@ def run_pipeline() -> dict[str, Any]:
     top_two_numeric.head(1).assign(variable_seleccionada=lambda frame: frame["termino"]).to_csv(
         TABLES_DIR / "selected_predictor_ci_95.csv", index=False
     )
+
+    all_coefficients_by_abs_t = (
+        coefficients.loc[coefficients["termino"] != "Intercept"]
+        .assign(abs_t=lambda frame: frame["t"].abs())
+        .sort_values("abs_t", ascending=False)
+        .reset_index(drop=True)
+    )
+    all_coefficients_by_abs_t.to_csv(TABLES_DIR / "all_coefficients_by_abs_t.csv", index=False)
+    all_coefficients_by_abs_t.head(2).assign(
+        criterio="Incluye coeficientes numéricos e indicadores de categorías",
+        referencia=lambda frame: np.where(
+            frame["termino"].str.startswith("C(clarity)"), "I1", pd.NA
+        ),
+    ).to_csv(TABLES_DIR / "top_two_coefficients_by_abs_t.csv", index=False)
     create_figures(data, model)
 
     result = {
